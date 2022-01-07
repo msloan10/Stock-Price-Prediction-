@@ -14,11 +14,11 @@ Original file is located at
 #Step 2: Determine how many days i want to predict the closing price (X)
 #Step 2 B: Clean/ Pre-process  data (X)
 #Step 2 C: Explore data (X)
-#Step 3: Determine model that will be used ()
-#Step 3 B: Determine metrics to judge model performance ()
-#Step 4: Split data into testing and training (validation part of training set) ()
-#Step 5: Train the model ()
-#Step 6: Use validation set to determine hyperparameters ()
+#Step 3: Determine model that will be used (X)
+#Step 3 B: Determine metrics to judge model performance (X)
+#Step 4: Split data into testing and training (X)
+#Step 5: Train the model (X)
+#Step 6: hyperparameters ()
 #Step 7: Test Model ()
 #Step 8: Deploy model, Save parameters ()
 
@@ -28,26 +28,26 @@ pip install alpha_vantage
 
 """## Introduction to Data"""
 
-from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import MinMaxScaler
 from alpha_vantage.timeseries import TimeSeries
+from keras.models import Sequential
+from keras.layers import Dense, LSTM, Dropout
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import math
-import csv
 
 key = input("Enter Alpha Vantage Key: ")
 ts = TimeSeries(key, output_format='pandas')
-data,meta = ts.get_daily('TSLA', outputsize='full')
-data
+df,meta = ts.get_daily('TSLA', outputsize='full')
+df
 
-data.info()
+df.info()
 
-data.columns
+df.columns
 
-data.describe()
+df.describe()
 
 """**Notes**
 
@@ -59,24 +59,24 @@ data.describe()
 ## Cleaning
 """
 
-clean_data = data.reindex(index=data.index[::-1])
-clean_data = clean_data.rename({'1. open': 'open', '2. high':'high', '3. low':'low','4. close':'close' ,'5. volume':'volume'}, axis = 1)
-clean_data['volume'] = clean_data['volume'].astype(float).astype(int)
-clean_data.head()
+clean_df = df.reindex(index=df.index[::-1])
+clean_df = clean_df.rename({'1. open': 'open', '2. high':'high', '3. low':'low','4. close':'close' ,'5. volume':'volume'}, axis = 1)
+clean_df['volume'] = clean_df['volume'].astype(float).astype(int)
+clean_df.head(6)
 
-clean_data.info()
+clean_df.info()
 
 """## EDA"""
 
-sns.displot(clean_data['close'], binwidth = 100)
+sns.displot(clean_df['close'], binwidth = 100)
 
 """**Skewed to the right**"""
 
-sns.displot(clean_data['volume'], binwidth = 1000500)
+sns.displot(clean_df['volume'], binwidth = 1000500)
 
 """**Skewed to the right**"""
 
-plt.plot(clean_data['close'])
+plt.plot(clean_df['close'])
 plt.title(' Tesla Stock Price over Time')
 plt.xlabel('Date')
 plt.ylabel('Price')
@@ -93,7 +93,7 @@ def get_moving_average(data,years) -> pd.DataFrame():
   return pd.DataFrame(moving_avg, index = years, columns = ['Moving AVG'])
 
 years = [2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022]
-yearly_moving_avg = get_moving_average(clean_data,years)
+yearly_moving_avg = get_moving_average(clean_df,years)
 yearly_moving_avg
 
 plt.plot(years,yearly_moving_avg['Moving AVG'])
@@ -120,7 +120,7 @@ def get_average_volume(data,years) -> pd.DataFrame():
 
   return pd.DataFrame(volume_avg, index = years, columns = ['Volume AVG'])
 
-yearly_vol_avg = get_average_volume(clean_data,years)
+yearly_vol_avg = get_average_volume(clean_df,years)
 yearly_vol_avg
 
 plt.plot(years,yearly_vol_avg['Volume AVG'])
@@ -138,36 +138,88 @@ plt.show()
 """
 
 plt.figure(figsize=(16,6))
-corr_heatmap = sns.heatmap(clean_data.corr(), annot = True)
+corr_heatmap = sns.heatmap(clean_df.corr(), annot = True)
 corr_heatmap.set_title('Attribute Correlation')
 
 """**Volume closely correlated with closing price**
 
-## Train, Test Split
+## Pre-Processsing
 """
 
-#get closing prce 
-exp_data = clean_data[['close']]
+#get closing price 
+raw_data = clean_df[['close']]
 
 #train and test set lengths 
-train_len = math.ceil(len(exp_data) * .8)
-test_len = len(exp_data) - train_len
+train_len = math.ceil(len(raw_data) * .8)
 
 # change dataset into array 
-exp_data_arr = exp_data.values
+data = raw_data.values
+data[:6]
+
+#number of days needed to predict one day 
+days_needed = 100
 
 #scale data, value will be between 0 and 1
 scaler = MinMaxScaler(feature_range=(0,1))
-scaled_data = scaler.fit_transform(exp_data_arr)
+scaled_data = scaler.fit_transform(data)
 
 #train test split 
 train_set = scaled_data[:train_len]
-test_set = scaled_data[train_len::]
+test_set = scaled_data[train_len-days_needed:]
+
 
 x_train = []
 y_train = []
 
-# get last 100 days 
-for i in range(100, train_len):
-  x_train.append(train_set[i-100: i])
+x_test = []
+y_test = data[train_len:]
+
+# appends [] with 100 days each in x_train
+# appends the expected day after the 100 days are taken into consideration 
+
+for i in range(days_needed, train_len):
+  x_train.append(train_set[i-days_needed: i])
   y_train.append(train_set[i])
+
+# appends [] with 100 days each 
+for i in range(days_needed, len(test_set)):
+  x_test.append(test_set[i-days_needed:i])
+
+x_train[0][:6]
+
+"""**15.80 went to 0 because it is the minimum value**"""
+
+type(x_train)
+
+# make sets numpy arrays 
+x_train = np.array(x_train)
+y_train = np.array(y_train)
+
+x_test = np.array(x_test)
+
+# reshape; need to be 3 dimensional for model input 
+x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
+y_train = np.reshape(y_train, (y_train.shape[0], y_train.shape[1], 1))
+
+x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
+
+
+print("x_train shape: ", x_train.shape)
+print("y_train shape: ", y_train.shape)
+
+print('x_test shape:', x_test.shape)
+
+#build model 
+#input_shape == (num days, 1)
+model = Sequential()
+model.add(LSTM(units = 50, return_sequences= True, input_shape = (x_train.shape[1], 1)))
+model.add(Dropout(0.2))
+model.add(LSTM(units = 100, return_sequences= False))
+model.add(Dense(25))
+model.add(Dense(1))
+
+model.compile(optimizer='adam', loss='mean_squared_error')
+
+model.fit(x = x_train, y = y_train, epochs = 15, batch_size=64)
+
+"""# Testing"""
