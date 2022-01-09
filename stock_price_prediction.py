@@ -18,8 +18,7 @@ Original file is located at
 #Step 3 B: Determine metrics to judge model performance (X)
 #Step 4: Split data into testing and training (X)
 #Step 5: Train the model (X)
-#Step 6: hyperparameters ()
-#Step 7: Test Model ()
+#Step 7: Test Model (X)
 #Step 8: Deploy model, Save parameters ()
 
 """# Import """
@@ -220,6 +219,54 @@ model.add(Dense(1))
 
 model.compile(optimizer='adam', loss='mean_squared_error')
 
-model.fit(x = x_train, y = y_train, epochs = 15, batch_size=64)
+model.fit(x = x_train, y = y_train, epochs = 30, batch_size=64)
 
 """# Testing"""
+
+predictions = model.predict(x_test)
+predictions = scaler.inverse_transform(predictions)
+
+mse = ((predictions-y_test)**2).mean()
+rmse = math.sqrt(mse)
+
+print("MSE: ", mse)
+print('RMSE: ', rmse)
+
+"""**RMSE is higher than I would like it to be**"""
+
+#all data sets 
+train_df = clean_df
+valid_df = clean_df[train_len:train_len+ days_needed]
+test_df = clean_df[train_len+ days_needed:]
+
+non_training_df = clean_df[train_len:]
+non_training_df['predictions'] = predictions
+
+valid_df.head()
+
+test_df.head()
+
+plt.figure(figsize=(16,8))
+plt.plot(train_df['close'])
+plt.plot(valid_df['close'])
+plt.plot(non_training_df['predictions'])
+plt.xlabel('year')
+plt.title('Actual vs Predicted Tesla Stock Prices')
+plt.ylabel('Price (USD)')
+plt.legend(['Training (Actual)', 'Train/Test Overlap (Actual)', 'Predicted'])
+plt.show()
+
+"""*Some of the training set data is used in the x_test set (last 100 days) to predict the first day of y_test. For this reason, I've highlighted the overlap in data. The data that has never been introduced to the NN begins after the orange line. Therefore the predicted line that is seen after the orange line has no overlap in data from the training sets.*
+
+**Observations**
+* Predicted values very similar to the actual values in the train/test overlap 
+* The model didn't do that well when estimating all time highs. 
+* Overall, the model's predicted values followed the pattern of the actual values very well
+
+# Forecast
+"""
+
+#Goal: Forecast first quarter (3 months) of stock prices
+
+
+
