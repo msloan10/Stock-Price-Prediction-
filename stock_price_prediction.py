@@ -35,6 +35,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import datetime
 import math
 
 key = input("Enter Alpha Vantage Key: ")
@@ -75,6 +76,7 @@ sns.displot(clean_df['volume'], binwidth = 1000500)
 
 """**Skewed to the right**"""
 
+plt.figure(figsize = (16,8))
 plt.plot(clean_df['close'])
 plt.title(' Tesla Stock Price over Time')
 plt.xlabel('Date')
@@ -95,6 +97,7 @@ years = [2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022]
 yearly_moving_avg = get_moving_average(clean_df,years)
 yearly_moving_avg
 
+plt.figure(figsize = (16,8))
 plt.plot(years,yearly_moving_avg['Moving AVG'])
 plt.title(' Tesla Stock Moving Average over Time')
 plt.xlabel('Year')
@@ -122,6 +125,7 @@ def get_average_volume(data,years) -> pd.DataFrame():
 yearly_vol_avg = get_average_volume(clean_df,years)
 yearly_vol_avg
 
+plt.figure(figsize = (16,8))
 plt.plot(years,yearly_vol_avg['Volume AVG'])
 plt.title(' Tesla Stock Volume Average over Time')
 plt.xlabel('Year')
@@ -266,7 +270,59 @@ plt.show()
 # Forecast
 """
 
-#Goal: Forecast first quarter (3 months) of stock prices
+#Goal: Forecast share price for nth days 
+def forecasting(model, scaled_data, numDays):
+  #all predicted days 
+  forecast= []
 
+  # data used to predict 
+  forecast_data = []
+  forecast_data.append(scaled_data[-100:])
+  forecast_data = np.array(forecast_data)
+  forecast_data = np.reshape(forecast_data, (forecast_data.shape[0], forecast_data.shape[1], 1))
 
+  for i in range(numDays):
+    forecast.append(model.predict(forecast_data[0:, i:, 0:])[0])
+    forecast_data = np.append(forecast_data, forecast[i])
+    forecast_data = np.array(forecast_data)
+    forecast_data = np.reshape(forecast_data, (1, forecast_data.shape[0], 1))
+  return forecast
 
+#number of days to forecast 
+numDays = 30
+forecast = forecasting(model = model, scaled_data=scaled_data, numDays=numDays)
+
+#change data back into orginal unit 
+forecast = scaler.inverse_transform(forecast)
+
+#gets dates from start to end date; for Dataframe 
+##TODO: TAKE A COOUNT FOR WEEKENDS, CHANGE FOR LOOP TO A WHILE LOOP 
+def get_dates(start_date, numDays) -> list():
+  dates = []
+  end_date = start_date + datetime.timedelta(days = numDays)
+  for i in range(delta.days + 1):
+    day = start_date + timedelta(days=i)
+    dates.append(str(day.date))
+  return dates 
+
+#get the day after the most recent date on df 
+start_date = clean_df.index[-1].strftime('%y-%m-%d')
+start_date = datetime.datetime.strptime(start_date, '%y-%m-%d')
+start_date = start_date + datetime.timedelta(days = 1)
+
+forecast_df_index = get_dates(start_date, numDays)
+
+forecast_df_index[:30]
+
+#TODO: CREATE DATAFRAME TO PLOT 
+forecast_df = pd.DataFrame(forecast, columns = ['close'], index = forecast_df_index)
+forecast.head()
+
+#TODO: PLOT ACTUAL AGAINST FORECASTED 
+
+plt.figure(figsize=(14, 8))
+plt.plot(clean_df['close'])
+plt.plot()
+plt.legend(['Actual', ' 30 day Projection'])
+
+#TODO: SAVE FORECAST AS CSV; MOVE TO POWER BI
